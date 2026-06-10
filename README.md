@@ -12,3 +12,30 @@ Built with Python, Flask, and SQLite. Movie data is pulled from the TMDB and OMD
 - Full movie detail pages with cast, description, and watch history
 - CLI client for quick terminal access
 - Dark cinema-themed UI
+
+## Setup
+
+### 1. Get your free API keys
+- **TMDB** (movie data, posters, streaming): https://www.themoviedb.org/settings/api
+- **OMDb** (Rotten Tomatoes scores): https://www.omdbapi.com/apikey.aspx
+
+Both are free and just require creating an account.
+
+### 2. Clone the repo
+git clone https://github.com/jonmunoz526-web/Movietracker299Final.git
+cd Movietracker299Final
+
+### 3. Install dependencies
+pip install -r requirements.txt
+
+### 4. Set up your API keys
+cp .env.example .env
+
+Open .env and replace the placeholder values with your real keys:
+TMDB_API_KEY=your_key_here
+OMDB_API_KEY=your_key_here
+
+### 5. Run the app
+python app.py
+
+Then open http://localhost:5000 in your browser.
