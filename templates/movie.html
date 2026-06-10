@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% block title %}{{ movie.title }} — CineMatch{% endblock %}
+
+{% block content %}
+
+<!-- Back -->
+<div style="margin-bottom:22px;">
+  <a href="javascript:history.back()" class="btn btn-ghost btn-sm">← Back</a>
+</div>
+
+<!-- Hero card -->
+<div style="position:relative;overflow:hidden;border-radius:var(--radius-lg);
+            border:1px solid var(--border);margin-bottom:28px;background:var(--bg2);">
+
+  {% if movie.poster_url %}
+  <!-- Blurred backdrop -->
+  <div style="position:absolute;inset:-40px;
+              background:url('{{ movie.poster_url }}') center/cover no-repeat;
+              filter:blur(50px);opacity:.18;pointer-events:none;"></div>
+  <div style="position:absolute;inset:0;
+              background:linear-gradient(100deg,var(--bg2) 35%,transparent 100%);
+              pointer-events:none;"></div>
+  {% endif %}
+
+  <div style="position:relative;display:flex;gap:32px;padding:36px;align-items:flex-start;flex-wrap:wrap;">
+
+    <!-- Poster -->
+    {% if movie.poster_url %}
+    <img src="{{ movie.poster_url }}" alt="{{ movie.title }}"
+         style="width:210px;flex-shrink:0;border-radius:10px;
+                box-shadow:0 12px 48px rgba(0,0,0,.8);display:block;">
+    {% else %}
+    <div style="width:210px;height:315px;flex-shrink:0;background:var(--bg3);border-radius:10px;
+                display:flex;align-items:center;justify-content:center;font-size:3.5rem;">🎬</div>
+    {% endif %}
+
+    <!-- Details -->
+    <div style="flex:1;min-width:260px;">
+
+      <h1 style="font-size:2rem;font-weight:800;line-height:1.2;margin-bottom:8px;">
+        {{ movie.title }}
+      </h1>
+
+      <div style="color:var(--text2);font-size:.97rem;margin-bottom:20px;">
+        {% if movie.year %}{{ movie.year }}{% endif %}
+        {% if movie.director %}<span style="color:var(--border2)"> · </span>{{ movie.director }}{% endif %}
+        {% if movie.runtime %}<span style="color:var(--border2)"> · </span>{{ movie.runtime }} min{% endif %}
+      </div>
+
+      <!-- RT Score -->
+      <div style="margin-bottom:18px;">
+        {% if movie.rotten_tomatoes_score is not none %}
+          {% set rt = movie.rotten_tomatoes_score %}
+          {% if rt >= 90 %}
+            {% set rt_bg = "rgba(46,204,113,.15)" %}{% set rt_border = "rgba(46,204,113,.4)" %}
+            {% set rt_color = "var(--green)" %}{% set rt_icon = "🍅" %}{% set rt_label = "Certified Fresh" %}
+          {% elif rt >= 60 %}
+            {% set rt_bg = "rgba(46,204,113,.1)" %}{% set rt_border = "rgba(46,204,113,.3)" %}
+            {% set rt_color = "var(--green)" %}{% set rt_icon = "🍅" %}{% set rt_label = "Fresh" %}
+          {% else %}
+            {% set rt_bg = "rgba(230,57,70,.12)" %}{% set rt_border = "rgba(230,57,70,.3)" %}
+            {% set rt_color = "var(--red)" %}{% set rt_icon = "🤢" %}{% set rt_label = "Rotten" %}
+          {% endif %}
+          <div style="display:inline-flex;align-items:center;gap:10px;
+                      background:{{ rt_bg }};border:1px solid {{ rt_border }};
+                      border-radius:10px;padding:10px 18px;">
+            <span style="font-size:1.8rem;line-height:1;">{{ rt_icon }}</span>
+            <div>
+              <div style="font-size:1.6rem;font-weight:800;color:{{ rt_color }};line-height:1;">{{ rt }}%</div>
+              <div style="font-size:.72rem;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.5px;">
+                Rotten Tomatoes · {{ rt_label }}
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div style="display:inline-flex;align-items:center;gap:8px;background:var(--bg3);
+                      border:1px solid var(--border);border-radius:10px;padding:10px 18px;">
+            <span style="font-size:1.4rem;">🍅</span>
+            <div style="color:var(--text3);font-size:.9rem;">RT score unavailable</div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Streaming -->
+      {% if movie.streaming_services %}
+      <div id="streamingBadges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;"></div>
+      {% endif %}
+
+      <!-- Genres -->
+      {% if movie.genre %}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;">
+        {% for g in movie.genre.split(',') %}
+        <span class="badge badge-genre">{{ g.strip() }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Description -->
+      {% if movie.description %}
+      <p style="color:var(--text2);line-height:1.75;font-size:.97rem;
+                max-width:640px;margin-bottom:28px;">{{ movie.description }}</p>
+      {% endif %}
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary"
+                onclick="document.getElementById('logModal').classList.add('open')">
+          {% if is_watched %}↺ Re-log{% else %}✓ Mark as Watched{% endif %}
+        </button>
+
+        {% if in_watchlist %}
+        <button class="btn btn-secondary" id="wlBtn" onclick="removeFromWatchlist()">
+          ☰ In Watchlist — Remove
+        </button>
+        {% else %}
+        <button class="btn btn-ghost" id="wlBtn" onclick="addToWatchlist()">
+          + Add to Watchlist
+        </button>
+        {% endif %}
+
+        {% if is_watched %}
+        <span class="badge badge-watched" style="padding:6px 12px;font-size:.8rem;">✓ Watched</span>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Watch history -->
+{% if watch_entries %}
+<div style="margin-bottom:32px;">
+  <h2 style="margin-bottom:16px;">Your Watch History</h2>
+  <div style="display:flex;flex-direction:column;gap:10px;" id="historyList">
+    {% for entry in watch_entries %}
+    <div class="card" style="padding:16px;" id="hist-{{ entry.id }}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div>
+          <div id="stars-{{ entry.id }}" style="margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            {% if entry.mood_tag %}
+            <span class="badge badge-mood">{{ entry.mood_tag }}</span>
+            {% endif %}
+            <span class="text-muted text-sm">{{ entry.watched_date }}</span>
+          </div>
+          {% if entry.notes %}
+          <div class="text-muted text-sm mt-8" style="font-style:italic;max-width:560px;">
+            "{{ entry.notes }}"
+          </div>
+          {% endif %}
+        </div>
+        <button class="btn btn-danger btn-xs" onclick="deleteEntry({{ entry.id }})">✕ Remove</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Log modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2>Log "{{ movie.title }}"</h2>
+        {% if movie.year %}<div class="text-muted text-sm mt-8">{{ movie.year }}</div>{% endif %}
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Your Rating</label>
+      <div class="star-rating">
+        <input type="radio" name="rating" id="r5" value="5"><label for="r5">★</label>
+        <input type="radio" name="rating" id="r4" value="4"><label for="r4">★</label>
+        <input type="radio" name="rating" id="r3" value="3" checked><label for="r3">★</label>
+        <input type="radio" name="rating" id="r2" value="2"><label for="r2">★</label>
+        <input type="radio" name="rating" id="r1" value="1"><label for="r1">★</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Mood Tag</label>
+      <select id="logMood">
+        <option value="">— Select a mood —</option>
+        <option>cozy</option><option>thrilling</option><option>mind-bending</option>
+        <option>heartwarming</option><option>dark</option><option>adventurous</option>
+        <option>funny</option><option>emotional</option><option>scary</option>
+        <option>action-packed</option><option>thoughtful</option><option>romantic</option>
+        <option>nostalgic</option><option>epic</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Date Watched</label>
+      <input type="date" id="logDate">
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="logNotes" placeholder="What did you think?"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="logSubmitBtn" onclick="submitLog()">Save Log</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+
+// Streaming badges
+{% if movie.streaming_services %}
+(function() {
+  const el = document.getElementById('streamingBadges');
+  if (el) el.innerHTML = {{ movie.streaming_services | tojson }}.map(streamingBadge).join('');
+})();
+{% endif %}
+
+// Star ratings in history
+{% for entry in watch_entries %}
+document.getElementById('stars-{{ entry.id }}').innerHTML = starsHtml({{ entry.user_rating or 0 }});
+{% endfor %}
+
+function closeModal() {
+  document.getElementById('logModal').classList.remove('open');
+}
+
+async function submitLog() {
+  const rating = parseInt(document.querySelector('input[name="rating"]:checked').value);
+  const btn = document.getElementById('logSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const res = await api('POST', '/api/log', {
+    tmdb_id:      {{ movie.tmdb_id }},
+    user_rating:  rating,
+    mood_tag:     document.getElementById('logMood').value,
+    notes:        document.getElementById('logNotes').value,
+    watched_date: document.getElementById('logDate').value,
+  });
+  btn.disabled = false; btn.textContent = 'Save Log';
+  if (res.success) {
+    closeModal();
+    showToast('Logged! ✓');
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(res.error || 'Failed to log', 'error');
+  }
+}
+
+async function addToWatchlist() {
+  const btn = document.getElementById('wlBtn');
+  btn.disabled = true; btn.textContent = '…';
+  const res = await api('POST', '/api/watchlist/add', { tmdb_id: {{ movie.tmdb_id }}, priority: 3 });
+  if (res.success) {
+    btn.textContent = '☰ In Watchlist — Remove';
+    btn.className = 'btn btn-secondary';
+    btn.onclick = removeFromWatchlist;
+    btn.disabled = false;
+    showToast('Added to watchlist!');
+  } else {
+    btn.disabled = false; btn.textContent = '+ Add to Watchlist';
+    showToast(res.error || 'Failed', 'error');
+  }
+}
+
+// watchlist_entry_id is passed from the server so we don't need an extra fetch
+let _wlEntryId = {{ watchlist_entry_id or 'null' }};
+
+async function removeFromWatchlist() {
+  if (!_wlEntryId) {
+    // Fallback: look it up
+    const wl = await api('GET', '/api/watchlist');
+    const entry = wl.find(w => w.tmdb_id === {{ movie.tmdb_id }});
+    if (!entry) return;
+    _wlEntryId = entry.id;
+  }
+  const btn = document.getElementById('wlBtn');
+  btn.disabled = true;
+  const res = await api('DELETE', `/api/watchlist/${_wlEntryId}`);
+  if (res.success) {
+    _wlEntryId = null;
+    btn.textContent = '+ Add to Watchlist';
+    btn.className = 'btn btn-ghost';
+    btn.onclick = addToWatchlist;
+    btn.disabled = false;
+    showToast('Removed from watchlist');
+  } else {
+    btn.disabled = false;
+    showToast('Failed', 'error');
+  }
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Remove this log entry?')) return;
+  const res = await api('DELETE', `/api/history/${id}`);
+  if (res.success) {
+    const el = document.getElementById(`hist-${id}`);
+    el.style.opacity = '0'; el.style.transition = 'opacity .2s';
+    setTimeout(() => el.remove(), 220);
+    showToast('Entry removed');
+  }
+}
+
+document.getElementById('logModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+</script>
+{% endblock %}

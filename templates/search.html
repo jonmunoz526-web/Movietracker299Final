@@ -125,13 +125,17 @@ async function doSearch(q) {
 
   resultsEl.innerHTML = data.map(m => `
     <div class="movie-card" data-tmdb="${m.tmdb_id}">
-      ${m.poster_url
-        ? `<img class="movie-poster" src="${m.poster_url}" alt="${esc(m.title)}" loading="lazy">`
-        : `<div class="movie-poster-placeholder">🎬</div>`}
+      <a href="/movie/${m.tmdb_id}" style="display:block;text-decoration:none;">
+        ${m.poster_url
+          ? `<img class="movie-poster" src="${m.poster_url}" alt="${esc(m.title)}" loading="lazy">`
+          : `<div class="movie-poster-placeholder">🎬</div>`}
+      </a>
       ${m.watched ? '<div style="position:absolute;top:8px;right:8px;"><span class="badge badge-watched">✓ Watched</span></div>' : ''}
       ${m.in_watchlist && !m.watched ? '<div style="position:absolute;top:8px;right:8px;"><span class="badge badge-genre">☰ Listed</span></div>' : ''}
       <div class="movie-info">
-        <div class="movie-title">${esc(m.title)}</div>
+        <a href="/movie/${m.tmdb_id}" style="text-decoration:none;color:inherit;">
+          <div class="movie-title">${esc(m.title)}</div>
+        </a>
         <div class="movie-year">${m.year || ''}${m.vote_average ? ` · ⭐ ${m.vote_average}` : ''}</div>
       </div>
       <div class="movie-actions">

@@ -130,6 +130,32 @@ def _ensure_movie(tmdb_id):
 
 # ── Page routes ──────────────────────────────────────────────────────────────
 
+@app.route("/movie/<int:tmdb_id>")
+def movie_detail(tmdb_id):
+    movie = get_movie_by_tmdb_id(tmdb_id)
+    if not movie:
+        if not TMDB_KEY:
+            return "Movie not found and no TMDB key configured.", 404
+        mid = enrich_and_store(tmdb_id)
+        if not mid:
+            return "Movie not found.", 404
+        movie = get_movie_by_id(mid)
+
+    watched_ids = get_watched_movie_ids()
+    wl_items    = get_watchlist()
+    wl_entry    = next((w for w in wl_items if w["tmdb_id"] == tmdb_id), None)
+    watch_entries = [h for h in get_watch_history(500) if h["movie_id"] == movie["id"]]
+
+    return render_template(
+        "movie.html",
+        movie=movie,
+        is_watched=movie["id"] in watched_ids,
+        in_watchlist=wl_entry is not None,
+        watchlist_entry_id=wl_entry["id"] if wl_entry else None,
+        watch_entries=watch_entries,
+    )
+
+
 @app.route("/")
 def dashboard():
     history  = get_watch_history(10)

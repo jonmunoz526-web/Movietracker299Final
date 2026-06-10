@@ -16,19 +16,24 @@
   {% for item in watchlist %}
   <div class="card wl-item" data-wl-id="{{ item.id }}" style="padding:16px;display:flex;gap:16px;align-items:flex-start;">
     <!-- Poster -->
-    {% if item.poster_url %}
-    <img src="{{ item.poster_url }}" alt="{{ item.title }}"
-         style="width:70px;height:104px;object-fit:cover;border-radius:8px;flex-shrink:0;">
-    {% else %}
-    <div style="width:70px;height:104px;background:var(--bg3);border-radius:8px;
-                display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0;">🎬</div>
-    {% endif %}
+    <a href="/movie/{{ item.tmdb_id }}" style="flex-shrink:0;display:block;">
+      {% if item.poster_url %}
+      <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+           style="width:70px;height:104px;object-fit:cover;border-radius:8px;display:block;
+                  transition:opacity .15s;" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">
+      {% else %}
+      <div style="width:70px;height:104px;background:var(--bg3);border-radius:8px;
+                  display:flex;align-items:center;justify-content:center;font-size:1.6rem;">🎬</div>
+      {% endif %}
+    </a>
 
     <!-- Info -->
     <div style="flex:1;min-width:0;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
         <div>
-          <div style="font-weight:700;font-size:1.05rem;">{{ item.title }}</div>
+          <a href="/movie/{{ item.tmdb_id }}" style="text-decoration:none;color:inherit;">
+            <div style="font-weight:700;font-size:1.05rem;">{{ item.title }}</div>
+          </a>
           <div class="text-muted">{{ item.year or '' }}{% if item.director %} · {{ item.director }}{% endif %}{% if item.runtime %} · {{ item.runtime }} min{% endif %}</div>
         </div>
         <div style="flex-shrink:0;">
