@@ -176,6 +176,16 @@ def get_watched_movie_ids():
     return {r["movie_id"] for r in rows}
 
 
+def get_watched_tmdb_ids():
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT DISTINCT m.tmdb_id FROM watch_history wh
+           JOIN movies m ON wh.movie_id = m.id"""
+    ).fetchall()
+    conn.close()
+    return {r["tmdb_id"] for r in rows}
+
+
 def delete_history_entry(entry_id):
     conn = get_db()
     conn.execute("DELETE FROM watch_history WHERE id = ?", (entry_id,))

@@ -1,17 +1,35 @@
 import os
 import json
+import random
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 
 from database import (
     init_db, get_movie_by_tmdb_id, get_movie_by_id, upsert_movie,
-    log_watch, get_watch_history, get_watched_movie_ids,
+    log_watch, get_watch_history, get_watched_movie_ids, get_watched_tmdb_ids,
     delete_history_entry, add_to_watchlist, get_watchlist,
     get_watchlist_movie_ids, remove_from_watchlist, update_watchlist_priority,
     get_preferences, update_preferences, get_all_movies, get_stats,
 )
-from recommender import score_movies, ALL_MOODS, ALL_GENRES, ALL_DECADES
+from recommender import ALL_MOODS, ALL_GENRES, ALL_DECADES
+
+TMDB_GENRE_IDS = {
+    "action": 28, "adventure": 12, "animation": 16, "comedy": 35,
+    "crime": 80, "documentary": 99, "drama": 18, "family": 10751,
+    "fantasy": 14, "history": 36, "horror": 27, "music": 10402,
+    "mystery": 9648, "romance": 10749, "science fiction": 878,
+    "thriller": 53, "war": 10752, "western": 37,
+}
+
+MOOD_TO_GENRE = {
+    "cozy": "drama", "thrilling": "thriller", "mind-bending": "science fiction",
+    "heartwarming": "comedy", "dark": "thriller", "adventurous": "adventure",
+    "funny": "comedy", "emotional": "drama", "scary": "horror",
+    "action-packed": "action", "thoughtful": "documentary", "romantic": "romance",
+    "nostalgic": "animation", "epic": "adventure",
+}
 
 load_dotenv()
 
@@ -266,20 +284,79 @@ def api_watchlist_priority(wl_id):
 
 # ── API: Recommendations ─────────────────────────────────────────────────────
 
+def _tmdb_fetch_page(genre_id, page):
+    """Fetch one page from TMDB popular or discover."""
+    if not TMDB_KEY:
+        return []
+    try:
+        if genre_id:
+            params = {
+                "api_key": TMDB_KEY,
+                "with_genres": genre_id,
+                "sort_by": "popularity.desc",
+                "vote_count.gte": 50,
+                "page": page,
+            }
+            r = requests.get(f"{TMDB_BASE}/discover/movie", params=params, timeout=8)
+        else:
+            r = requests.get(
+                f"{TMDB_BASE}/movie/popular",
+                params={"api_key": TMDB_KEY, "page": page},
+                timeout=8,
+            )
+        return r.json().get("results", []) if r.ok else []
+    except Exception:
+        return []
+
+
 @app.route("/api/recommendations")
 def api_recommendations():
-    mood  = request.args.get("mood", "")
-    genre = request.args.get("genre", "")
-    limit = request.args.get("limit", 24, type=int)
+    if not TMDB_KEY:
+        return jsonify({"error": "TMDB_API_KEY not configured"}), 500
 
-    prefs       = get_preferences()
-    all_movies  = get_all_movies()
-    watched_ids = get_watched_movie_ids()
-    history     = get_watch_history(200)
+    mood  = request.args.get("mood", "").lower().strip()
+    genre = request.args.get("genre", "").lower().strip()
 
-    scored = score_movies(all_movies, watched_ids, history, prefs,
-                          mood_filter=mood, genre_filter=genre)
-    return jsonify(scored[:limit])
+    # Resolve to a TMDB genre ID
+    genre_id = None
+    if genre:
+        genre_id = TMDB_GENRE_IDS.get(genre)
+    elif mood:
+        genre_id = TMDB_GENRE_IDS.get(MOOD_TO_GENRE.get(mood, ""), None)
+
+    # Gather candidates from up to 3 pages, skipping already-watched movies
+    watched_tmdb_ids = get_watched_tmdb_ids()
+    candidates = []
+    for page in range(1, 4):
+        for m in _tmdb_fetch_page(genre_id, page):
+            if m["id"] not in watched_tmdb_ids:
+                candidates.append(m)
+
+    if not candidates:
+        return jsonify([])
+
+    picks = random.sample(candidates, min(5, len(candidates)))
+
+    # Enrich each pick in parallel; skip full re-fetch if already stored
+    def _enrich_pick(tmdb_id):
+        existing = get_movie_by_tmdb_id(tmdb_id)
+        if existing and existing.get("poster_url") and existing.get("rotten_tomatoes_score") is not None:
+            return existing
+        mid = enrich_and_store(tmdb_id)
+        return get_movie_by_id(mid) if mid else None
+
+    results = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(_enrich_pick, p["id"]) for p in picks]
+        for fut in futures:
+            try:
+                m = fut.result(timeout=20)
+                if m:
+                    results.append(m)
+            except Exception:
+                pass
+
+    return jsonify(results)
 
 
 # ── API: History ─────────────────────────────────────────────────────────────
