@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CineMatch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><span class="page-icon">⊞</span> Dashboard</h1>
+  <div class="flex gap-8">
+    <a href="/search" class="btn btn-primary btn-sm">+ Log Movie</a>
+    <a href="/recommendations" class="btn btn-gold btn-sm">✦ Get Recommendations</a>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px;">
+  <div class="card" style="text-align:center;">
+    <div style="font-size:2rem;font-weight:700;color:var(--gold)">{{ stats.total_watched }}</div>
+    <div class="text-muted mt-8">Movies Watched</div>
+  </div>
+  <div class="card" style="text-align:center;">
+    <div style="font-size:2rem;font-weight:700;color:var(--green)">
+      {% if stats.avg_rating %}{{ stats.avg_rating }}{% else %}—{% endif %}
+    </div>
+    <div class="text-muted mt-8">Avg Rating</div>
+  </div>
+  <div class="card" style="text-align:center;">
+    <div style="font-size:2rem;font-weight:700;color:var(--blue)">{{ stats.watchlist_count }}</div>
+    <div class="text-muted mt-8">In Watchlist</div>
+  </div>
+  <div class="card" style="text-align:center;">
+    <div style="font-size:1.4rem;font-weight:700;color:var(--red)">{{ stats.top_genre }}</div>
+    <div class="text-muted mt-8">Top Genre</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start;">
+
+  <!-- Recent Watches -->
+  <div>
+    <div class="section-header">
+      <h2>🕐 Recent Watches</h2>
+      <a href="/search" class="btn btn-ghost btn-sm">+ Log Movie</a>
+    </div>
+
+    {% if history %}
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      {% for h in history %}
+      <div class="card" style="padding:14px;display:flex;gap:14px;align-items:flex-start;">
+        {% if h.poster_url %}
+        <img src="{{ h.poster_url }}" alt="{{ h.title }}"
+             style="width:54px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+        {% else %}
+        <div style="width:54px;height:80px;background:var(--bg3);border-radius:6px;
+                    display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">🎬</div>
+        {% endif %}
+        <div style="flex:1;min-width:0;">
+          <div class="flex-between">
+            <div>
+              <div style="font-weight:600;font-size:.95rem;">{{ h.title }}</div>
+              <div class="text-muted">{{ h.year }}{% if h.director %} · {{ h.director }}{% endif %}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div id="stars-dash-{{ h.id }}"></div>
+              <div class="text-muted" style="font-size:.75rem;margin-top:3px;">{{ h.watched_date }}</div>
+            </div>
+          </div>
+          <div class="flex gap-8 mt-8" style="flex-wrap:wrap;">
+            {% if h.mood_tag %}
+            <span class="badge badge-mood">{{ h.mood_tag }}</span>
+            {% endif %}
+            {% if h.rotten_tomatoes_score %}
+            <span id="rt-dash-{{ h.id }}"></span>
+            {% endif %}
+            {% if h.genre %}
+            {% for g in h.genre.split(',')[:2] %}
+            <span class="badge badge-genre">{{ g.strip() }}</span>
+            {% endfor %}
+            {% endif %}
+          </div>
+          {% if h.notes %}
+          <div class="text-muted text-sm mt-8" style="font-style:italic;">"{{ h.notes[:100] }}{% if h.notes|length > 100 %}…{% endif %}"</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:40px;">
+      <div class="empty-icon">🎬</div>
+      <p>No movies logged yet.</p>
+      <a href="/search" class="btn btn-primary">Search & Log Your First Movie</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Watchlist preview -->
+  <div>
+    <div class="section-header">
+      <h2>📋 Up Next</h2>
+      <a href="/watchlist" class="btn btn-ghost btn-sm">View All</a>
+    </div>
+
+    {% if watchlist %}
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      {% for item in watchlist %}
+      <div class="card" style="padding:12px;display:flex;gap:12px;align-items:center;">
+        {% if item.poster_url %}
+        <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+             style="width:42px;height:62px;object-fit:cover;border-radius:5px;flex-shrink:0;">
+        {% else %}
+        <div style="width:42px;height:62px;background:var(--bg3);border-radius:5px;
+                    display:flex;align-items:center;justify-content:center;font-size:1rem;">🎬</div>
+        {% endif %}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.title }}</div>
+          <div class="text-muted" style="font-size:.76rem;">{{ item.year }}</div>
+          <div id="wl-dots-{{ item.id }}" style="margin-top:5px;"></div>
+        </div>
+        <div id="wl-rt-{{ item.id }}" style="flex-shrink:0;"></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:32px;">
+      <div class="empty-icon">📋</div>
+      <p>Your watchlist is empty.</p>
+      <a href="/search" class="btn btn-secondary btn-sm">Add Movies</a>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  {% for h in history %}
+  document.getElementById('stars-dash-{{ h.id }}').innerHTML = starsHtml({{ h.user_rating or 0 }});
+  {% if h.rotten_tomatoes_score %}
+  document.getElementById('rt-dash-{{ h.id }}').innerHTML = rtBadge({{ h.rotten_tomatoes_score }});
+  {% endif %}
+  {% endfor %}
+
+  {% for item in watchlist %}
+  document.getElementById('wl-dots-{{ item.id }}').innerHTML = priorityDots({{ item.priority or 3 }});
+  {% if item.rotten_tomatoes_score %}
+  document.getElementById('wl-rt-{{ item.id }}').innerHTML = rtBadge({{ item.rotten_tomatoes_score }});
+  {% endif %}
+  {% endfor %}
+});
+</script>
+{% endblock %}

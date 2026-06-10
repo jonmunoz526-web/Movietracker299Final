@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Profile — CineMatch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><span class="page-icon">◎</span> Profile &amp; Preferences</h1>
+  <button class="btn btn-primary" onclick="savePreferences()">Save Preferences</button>
+</div>
+
+<div style="max-width:780px;">
+
+  <!-- API key status -->
+  <div id="apiStatus" class="api-banner" style="display:none;">
+    ⚠️ <span id="apiMsg"></span>
+  </div>
+
+  <form id="prefsForm">
+
+    <!-- Favourite Genres -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-title">Favourite Genres</div>
+      <p class="text-muted text-sm mb-16">Movies in these genres get a score boost in recommendations.</p>
+      <div class="chip-group" id="favGenres">
+        {% for genre in all_genres %}
+        <div>
+          <input type="checkbox" id="fg_{{ genre }}" name="fav_genre" value="{{ genre }}"
+                 {% if genre in preferences.favorite_genres %}checked{% endif %}>
+          <label for="fg_{{ genre }}">{{ genre }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Excluded Genres -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-title">Excluded Genres</div>
+      <p class="text-muted text-sm mb-16">Movies with these genres are hidden from recommendations.</p>
+      <div class="chip-group excluded" id="exclGenres">
+        {% for genre in all_genres %}
+        <div>
+          <input type="checkbox" id="eg_{{ genre }}" name="excl_genre" value="{{ genre }}"
+                 {% if genre in preferences.excluded_genres %}checked{% endif %}>
+          <label for="eg_{{ genre }}">{{ genre }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Favourite Moods -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-title">Favourite Moods</div>
+      <p class="text-muted text-sm mb-16">Used to infer genre preferences even without a mood filter.</p>
+      <div class="chip-group moods" id="favMoods">
+        {% for mood in all_moods %}
+        <div>
+          <input type="checkbox" id="fm_{{ mood }}" name="fav_mood" value="{{ mood }}"
+                 {% if mood in preferences.favorite_moods %}checked{% endif %}>
+          <label for="fm_{{ mood }}">{{ mood.replace('-', ' ').title() }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Preferred Decades -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-title">Preferred Decades</div>
+      <p class="text-muted text-sm mb-16">Bonus points for movies from your favourite eras.</p>
+      <div class="chip-group" id="prefDecades">
+        {% for decade in all_decades %}
+        <div>
+          <input type="checkbox" id="dec_{{ decade }}" name="decade" value="{{ decade }}"
+                 {% if decade in preferences.preferred_decades %}checked{% endif %}>
+          <label for="dec_{{ decade }}">{{ decade }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Streaming Services -->
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-title">My Streaming Services</div>
+      <p class="text-muted text-sm mb-16">Movies available on these services get a boost in recommendations.</p>
+      <div class="chip-group services" id="streamingServices">
+        {% set services = [
+          'Netflix', 'Hulu', 'Disney+', 'Max', 'Prime Video',
+          'Apple TV+', 'Peacock', 'Paramount+', 'Showtime', 'Starz'
+        ] %}
+        {% for svc in services %}
+        <div>
+          <input type="checkbox" id="svc_{{ loop.index }}" name="service" value="{{ svc }}"
+                 {% if svc in preferences.streaming_services %}checked{% endif %}>
+          <label for="svc_{{ loop.index }}">{{ svc }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </form>
+
+  <div style="display:flex;gap:12px;justify-content:flex-end;">
+    <button class="btn btn-ghost" onclick="resetForm()">Reset</button>
+    <button class="btn btn-primary" onclick="savePreferences()">Save Preferences</button>
+  </div>
+
+  <!-- Watch History section -->
+  <div class="divider" style="margin-top:36px;"></div>
+  <div class="section-header" style="margin-top:24px;">
+    <h2>🕐 Watch History</h2>
+    <a href="/search" class="btn btn-ghost btn-sm">+ Log Movie</a>
+  </div>
+
+  <div id="historyContainer">
+    <div class="loading"><div class="spinner"></div> Loading…</div>
+  </div>
+
+</div>
+
+<script>
+async function savePreferences() {
+  const checked = (name) =>
+    [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value);
+
+  const prefs = {
+    favorite_genres:   checked('fav_genre'),
+    excluded_genres:   checked('excl_genre'),
+    favorite_moods:    checked('fav_mood'),
+    preferred_decades: checked('decade'),
+    streaming_services: checked('service'),
+  };
+
+  const res = await api('POST', '/api/preferences', prefs);
+  if (res.success) showToast('Preferences saved! ✓');
+  else showToast('Failed to save', 'error');
+}
+
+function resetForm() {
+  document.querySelectorAll('#prefsForm input[type="checkbox"]')
+    .forEach(cb => cb.checked = false);
+  showToast('Form cleared — click Save to apply', 'info');
+}
+
+// Load history
+async function loadHistory() {
+  const container = document.getElementById('historyContainer');
+  const data = await api('GET', '/api/history?limit=100');
+
+  if (!data.length) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:32px;">
+        <div class="empty-icon">🎬</div>
+        <p>No watch history yet.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${data.map(h => `
+        <div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:14px;" id="hist-${h.id}">
+          ${h.poster_url
+            ? `<img src="${h.poster_url}" style="width:36px;height:54px;object-fit:cover;border-radius:4px;flex-shrink:0;">`
+            : `<div style="width:36px;height:54px;background:var(--bg3);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;">🎬</div>`}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:.9rem;">${esc(h.title)} <span class="text-muted">(${h.year || ''})</span></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap;">
+              <span>${starsHtml(h.user_rating)}</span>
+              ${h.mood_tag ? `<span class="badge badge-mood">${esc(h.mood_tag)}</span>` : ''}
+              ${rtBadge(h.rotten_tomatoes_score)}
+              <span class="text-muted" style="font-size:.76rem;">${h.watched_date}</span>
+            </div>
+          </div>
+          <button class="btn btn-danger btn-xs" onclick="deleteHistory(${h.id})">✕</button>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+async function deleteHistory(id) {
+  if (!confirm('Remove this entry from your history?')) return;
+  const res = await api('DELETE', `/api/history/${id}`);
+  if (res.success) {
+    const el = document.getElementById(`hist-${id}`);
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 200);
+    showToast('History entry removed');
+  } else {
+    showToast('Failed to remove', 'error');
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadHistory();
+</script>
+{% endblock %}

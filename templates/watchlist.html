@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Watchlist — CineMatch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><span class="page-icon">☰</span> Watchlist</h1>
+  <a href="/search" class="btn btn-primary btn-sm">+ Add Movies</a>
+</div>
+
+{% if watchlist %}
+<div style="margin-bottom:16px;color:var(--text3);font-size:.88rem;">
+  {{ watchlist|length }} movie{{ 's' if watchlist|length != 1 }} saved
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px;" id="watchlistContainer">
+  {% for item in watchlist %}
+  <div class="card wl-item" data-wl-id="{{ item.id }}" style="padding:16px;display:flex;gap:16px;align-items:flex-start;">
+    <!-- Poster -->
+    {% if item.poster_url %}
+    <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+         style="width:70px;height:104px;object-fit:cover;border-radius:8px;flex-shrink:0;">
+    {% else %}
+    <div style="width:70px;height:104px;background:var(--bg3);border-radius:8px;
+                display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0;">🎬</div>
+    {% endif %}
+
+    <!-- Info -->
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div>
+          <div style="font-weight:700;font-size:1.05rem;">{{ item.title }}</div>
+          <div class="text-muted">{{ item.year or '' }}{% if item.director %} · {{ item.director }}{% endif %}{% if item.runtime %} · {{ item.runtime }} min{% endif %}</div>
+        </div>
+        <div style="flex-shrink:0;">
+          <span class="rt-badge-{{ item.id }}"></span>
+        </div>
+      </div>
+
+      {% if item.description %}
+      <div class="text-sm mt-8" style="color:var(--text2);line-height:1.5;
+           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+        {{ item.description[:160] }}{% if item.description|length > 160 %}…{% endif %}
+      </div>
+      {% endif %}
+
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center;">
+        {% if item.genre %}
+        {% for g in item.genre.split(',')[:3] %}
+        <span class="badge badge-genre">{{ g.strip() }}</span>
+        {% endfor %}
+        {% endif %}
+        <span class="streaming-{{ item.id }}"></span>
+      </div>
+
+      <!-- Controls -->
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="text-muted" style="font-size:.8rem;">Priority:</span>
+          <div style="display:flex;gap:4px;">
+            {% for p in range(1, 6) %}
+            <button class="priority-btn"
+                    data-wl="{{ item.id }}" data-p="{{ p }}"
+                    style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border);
+                           background:{% if p <= item.priority %}var(--gold2){% else %}var(--bg3){% endif %};
+                           cursor:pointer;transition:all .15s;padding:0;"
+                    onclick="setPriority({{ item.id }}, {{ p }})">
+            </button>
+            {% endfor %}
+          </div>
+          <span class="text-muted" style="font-size:.75rem;">{{ item.priority }}/5</span>
+        </div>
+
+        <span class="text-muted" style="font-size:.78rem;">Added {{ item.added_date }}</span>
+
+        <div style="display:flex;gap:8px;margin-left:auto;">
+          <button class="btn btn-primary btn-xs log-btn"
+                  data-tmdb="{{ item.tmdb_id }}"
+                  data-title="{{ item.title }}"
+                  data-year="{{ item.year or '' }}"
+                  onclick="openLog(this.dataset.tmdb, this.dataset.title, this.dataset.year)">
+            Mark Watched
+          </button>
+          <button class="btn btn-danger btn-xs"
+                  onclick="removeItem({{ item.id }}, this)">
+            ✕ Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Log Modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="logModalTitle">Mark as Watched</h2>
+        <div class="text-muted text-sm mt-8" id="logModalYear"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('logModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Your Rating</label>
+      <div class="star-rating">
+        <input type="radio" name="rating" id="r5" value="5"><label for="r5">★</label>
+        <input type="radio" name="rating" id="r4" value="4"><label for="r4">★</label>
+        <input type="radio" name="rating" id="r3" value="3" checked><label for="r3">★</label>
+        <input type="radio" name="rating" id="r2" value="2"><label for="r2">★</label>
+        <input type="radio" name="rating" id="r1" value="1"><label for="r1">★</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Mood Tag</label>
+      <select id="logMood">
+        <option value="">— Select a mood —</option>
+        <option>cozy</option><option>thrilling</option><option>mind-bending</option>
+        <option>heartwarming</option><option>dark</option><option>adventurous</option>
+        <option>funny</option><option>emotional</option><option>scary</option>
+        <option>action-packed</option><option>thoughtful</option><option>romantic</option>
+        <option>nostalgic</option><option>epic</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Date Watched</label>
+      <input type="date" id="logDate">
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="logNotes" placeholder="What did you think?"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('logModal')">Cancel</button>
+      <button class="btn btn-primary" id="logSubmitBtn" onclick="submitLog()">Save Log</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _activeTmdbId = null;
+let _activeWlId   = null;
+document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+
+// Render badges
+{% for item in watchlist %}
+  {% if item.rotten_tomatoes_score %}
+  document.querySelector('.rt-badge-{{ item.id }}').outerHTML = rtBadge({{ item.rotten_tomatoes_score }});
+  {% endif %}
+  {% if item.streaming_services %}
+  document.querySelector('.streaming-{{ item.id }}').innerHTML =
+    {{ item.streaming_services | tojson }}.map(streamingBadge).join(' ');
+  {% endif %}
+{% endfor %}
+
+async function removeItem(wlId, btn) {
+  if (!confirm('Remove from watchlist?')) return;
+  btn.disabled = true;
+  const res = await api('DELETE', `/api/watchlist/${wlId}`);
+  if (res.success) {
+    const card = document.querySelector(`[data-wl-id="${wlId}"]`);
+    card.style.opacity = '0';
+    card.style.transform = 'translateX(20px)';
+    card.style.transition = 'all .25s ease';
+    setTimeout(() => card.remove(), 260);
+    showToast('Removed from watchlist');
+  } else {
+    btn.disabled = false;
+    showToast('Failed to remove', 'error');
+  }
+}
+
+async function setPriority(wlId, priority) {
+  await api('PUT', `/api/watchlist/${wlId}/priority`, { priority });
+  // Update button colors
+  const btns = document.querySelectorAll(`[data-wl="${wlId}"]`);
+  btns.forEach(b => {
+    const p = parseInt(b.dataset.p);
+    b.style.background = p <= priority ? 'var(--gold2)' : 'var(--bg3)';
+  });
+  const item = document.querySelector(`[data-wl-id="${wlId}"]`);
+  const label = item.querySelector('.text-muted[style*="font-size:.75rem"]');
+  if (label) label.textContent = `${priority}/5`;
+  showToast('Priority updated');
+}
+
+function openLog(tmdbId, title, year) {
+  _activeTmdbId = tmdbId;
+  document.getElementById('logModalTitle').textContent = title;
+  document.getElementById('logModalYear').textContent = year || '';
+  document.querySelector('input[name="rating"][value="3"]').checked = true;
+  document.getElementById('logMood').value = '';
+  document.getElementById('logNotes').value = '';
+  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('logModal').classList.add('open');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function submitLog() {
+  const rating = parseInt(document.querySelector('input[name="rating"]:checked').value);
+  const btn = document.getElementById('logSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const res = await api('POST', '/api/log', {
+    tmdb_id: _activeTmdbId, user_rating: rating,
+    mood_tag: document.getElementById('logMood').value,
+    notes:    document.getElementById('logNotes').value,
+    watched_date: document.getElementById('logDate').value,
+  });
+  btn.disabled = false; btn.textContent = 'Save Log';
+  if (res.success) {
+    closeModal('logModal');
+    showToast('Logged! Consider removing from watchlist.');
+  } else {
+    showToast(res.error || 'Failed', 'error');
+  }
+}
+
+document.getElementById('logModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('logModal');
+});
+</script>
+
+{% else %}
+<div class="empty-state" style="padding:64px;">
+  <div class="empty-icon">📋</div>
+  <h2>Your watchlist is empty</h2>
+  <p>Search for movies and click <strong>+ List</strong> to save them here.</p>
+  <a href="/search" class="btn btn-primary" style="margin-top:8px;">Search Movies</a>
+</div>
+{% endif %}
+{% endblock %}

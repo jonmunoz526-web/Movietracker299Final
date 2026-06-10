@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Search — CineMatch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><span class="page-icon">⌕</span> Search Movies</h1>
+</div>
+
+<!-- Search bar -->
+<div style="max-width:620px;margin-bottom:32px;">
+  <div style="position:relative;">
+    <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);
+                 font-size:1.1rem;color:var(--text3);pointer-events:none;">⌕</span>
+    <input type="search" id="searchInput" placeholder="Search for a movie title…"
+           style="padding-left:42px;font-size:1rem;height:48px;"
+           autocomplete="off">
+  </div>
+  <div class="text-muted mt-8" style="padding-left:4px;">
+    Results come from TMDB. Click <strong style="color:var(--text2)">Log</strong> to record a watched movie or
+    <strong style="color:var(--text2)">+ List</strong> to save to your watchlist.
+  </div>
+</div>
+
+<!-- Results -->
+<div id="searchStatus"></div>
+<div id="searchResults" class="movie-grid"></div>
+
+<!-- Log Modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="logModalTitle">Log Movie</h2>
+        <div class="text-muted text-sm mt-8" id="logModalYear"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('logModal')">✕</button>
+    </div>
+
+    <div class="form-group">
+      <label>Your Rating</label>
+      <div class="star-rating">
+        <input type="radio" name="rating" id="r5" value="5"><label for="r5">★</label>
+        <input type="radio" name="rating" id="r4" value="4"><label for="r4">★</label>
+        <input type="radio" name="rating" id="r3" value="3" checked><label for="r3">★</label>
+        <input type="radio" name="rating" id="r2" value="2"><label for="r2">★</label>
+        <input type="radio" name="rating" id="r1" value="1"><label for="r1">★</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Mood Tag</label>
+      <select id="logMood">
+        <option value="">— Select a mood —</option>
+        <option>cozy</option>
+        <option>thrilling</option>
+        <option>mind-bending</option>
+        <option>heartwarming</option>
+        <option>dark</option>
+        <option>adventurous</option>
+        <option>funny</option>
+        <option>emotional</option>
+        <option>scary</option>
+        <option>action-packed</option>
+        <option>thoughtful</option>
+        <option>romantic</option>
+        <option>nostalgic</option>
+        <option>epic</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Date Watched</label>
+      <input type="date" id="logDate">
+    </div>
+
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="logNotes" placeholder="What did you think?"></textarea>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('logModal')">Cancel</button>
+      <button class="btn btn-primary" id="logSubmitBtn" onclick="submitLog()">Save Log</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _activeTmdbId = null;
+let _debounce = null;
+
+const searchInput = document.getElementById('searchInput');
+const resultsEl   = document.getElementById('searchResults');
+const statusEl    = document.getElementById('searchStatus');
+
+// Set today as default date
+document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(_debounce);
+  const q = searchInput.value.trim();
+  if (!q) { resultsEl.innerHTML = ''; statusEl.innerHTML = ''; return; }
+  _debounce = setTimeout(() => doSearch(q), 380);
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { clearTimeout(_debounce); doSearch(searchInput.value.trim()); }
+});
+
+async function doSearch(q) {
+  if (!q) return;
+  statusEl.innerHTML = '<div class="loading"><div class="spinner"></div> Searching…</div>';
+  resultsEl.innerHTML = '';
+  const data = await api('GET', `/api/search?q=${encodeURIComponent(q)}`);
+  statusEl.innerHTML = '';
+
+  if (data.error) {
+    statusEl.innerHTML = `<div class="api-banner">⚠️ ${data.error} — Add your API key in the .env file.</div>`;
+    return;
+  }
+  if (!data.length) {
+    statusEl.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>No results found.</p></div>';
+    return;
+  }
+
+  resultsEl.innerHTML = data.map(m => `
+    <div class="movie-card" data-tmdb="${m.tmdb_id}">
+      ${m.poster_url
+        ? `<img class="movie-poster" src="${m.poster_url}" alt="${esc(m.title)}" loading="lazy">`
+        : `<div class="movie-poster-placeholder">🎬</div>`}
+      ${m.watched ? '<div style="position:absolute;top:8px;right:8px;"><span class="badge badge-watched">✓ Watched</span></div>' : ''}
+      ${m.in_watchlist && !m.watched ? '<div style="position:absolute;top:8px;right:8px;"><span class="badge badge-genre">☰ Listed</span></div>' : ''}
+      <div class="movie-info">
+        <div class="movie-title">${esc(m.title)}</div>
+        <div class="movie-year">${m.year || ''}${m.vote_average ? ` · ⭐ ${m.vote_average}` : ''}</div>
+      </div>
+      <div class="movie-actions">
+        <button class="btn btn-primary btn-xs" onclick="openLog(${m.tmdb_id}, '${esc(m.title)}', '${m.year}')">
+          ${m.watched ? '+ Re-log' : 'Log'}
+        </button>
+        <button class="btn btn-ghost btn-xs" onclick="addToWatchlist(${m.tmdb_id}, this)"
+                ${m.in_watchlist ? 'disabled' : ''}>
+          ${m.in_watchlist ? '☰ Listed' : '+ List'}
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openLog(tmdbId, title, year) {
+  _activeTmdbId = tmdbId;
+  document.getElementById('logModalTitle').textContent = title;
+  document.getElementById('logModalYear').textContent = year || '';
+  document.querySelector('input[name="rating"][value="3"]').checked = true;
+  document.getElementById('logMood').value = '';
+  document.getElementById('logNotes').value = '';
+  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('logModal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+async function submitLog() {
+  const rating = parseInt(document.querySelector('input[name="rating"]:checked').value);
+  const mood   = document.getElementById('logMood').value;
+  const notes  = document.getElementById('logNotes').value;
+  const date   = document.getElementById('logDate').value;
+
+  const btn = document.getElementById('logSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const res = await api('POST', '/api/log', {
+    tmdb_id: _activeTmdbId, user_rating: rating,
+    mood_tag: mood, notes, watched_date: date,
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Save Log';
+
+  if (res.success) {
+    closeModal('logModal');
+    showToast('Movie logged! ✓');
+    doSearch(searchInput.value.trim());
+  } else {
+    showToast(res.error || 'Failed to log movie', 'error');
+  }
+}
+
+async function addToWatchlist(tmdbId, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  const res = await api('POST', '/api/watchlist/add', { tmdb_id: tmdbId, priority: 3 });
+  if (res.success) {
+    btn.textContent = '☰ Listed';
+    showToast('Added to watchlist!');
+  } else {
+    btn.disabled = false;
+    btn.textContent = '+ List';
+    showToast(res.error || 'Failed', 'error');
+  }
+}
+
+document.getElementById('logModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('logModal');
+});
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

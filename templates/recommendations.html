@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}For You — CineMatch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><span class="page-icon">✦</span> For You</h1>
+  <a href="/profile" class="btn btn-ghost btn-sm">⚙ Tune Preferences</a>
+</div>
+
+{% if movie_count == 0 %}
+<div class="empty-state" style="padding:64px;">
+  <div class="empty-icon">✦</div>
+  <h2 style="margin-bottom:12px;">No movies in your library yet</h2>
+  <p>Search for movies and add them to your watchlist — CineMatch will score and rank them for you.</p>
+  <a href="/search" class="btn btn-primary" style="margin-top:8px;">Search Movies</a>
+</div>
+{% else %}
+
+<!-- Filters -->
+<div class="card" style="margin-bottom:28px;">
+  <div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;">
+    <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+      <label>Mood</label>
+      <select id="moodFilter">
+        <option value="">Any mood</option>
+        {% for mood in all_moods %}
+        <option value="{{ mood }}">{{ mood.replace('-',' ').title() }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+      <label>Genre</label>
+      <select id="genreFilter">
+        <option value="">Any genre</option>
+        {% for genre in all_genres %}
+        <option value="{{ genre }}">{{ genre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="loadRecs()">Get Recommendations</button>
+    <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<!-- Preferences summary -->
+{% if preferences.favorite_genres or preferences.streaming_services %}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
+  <span class="text-muted">Your preferences:</span>
+  {% for g in preferences.favorite_genres[:4] %}
+  <span class="badge badge-genre">{{ g }}</span>
+  {% endfor %}
+  {% for s in preferences.streaming_services[:3] %}
+  <span id="pref-svc-{{ loop.index }}" class="badge"></span>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div id="recStatus"></div>
+<div id="recResults"></div>
+
+<!-- Log Modal (reused from search page) -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="logModalTitle">Log Movie</h2>
+        <div class="text-muted text-sm mt-8" id="logModalYear"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('logModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Your Rating</label>
+      <div class="star-rating">
+        <input type="radio" name="rating" id="r5" value="5"><label for="r5">★</label>
+        <input type="radio" name="rating" id="r4" value="4"><label for="r4">★</label>
+        <input type="radio" name="rating" id="r3" value="3" checked><label for="r3">★</label>
+        <input type="radio" name="rating" id="r2" value="2"><label for="r2">★</label>
+        <input type="radio" name="rating" id="r1" value="1"><label for="r1">★</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Mood Tag</label>
+      <select id="logMood">
+        <option value="">— Select a mood —</option>
+        <option>cozy</option><option>thrilling</option><option>mind-bending</option>
+        <option>heartwarming</option><option>dark</option><option>adventurous</option>
+        <option>funny</option><option>emotional</option><option>scary</option>
+        <option>action-packed</option><option>thoughtful</option><option>romantic</option>
+        <option>nostalgic</option><option>epic</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Date Watched</label>
+      <input type="date" id="logDate">
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="logNotes" placeholder="What did you think?"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('logModal')">Cancel</button>
+      <button class="btn btn-primary" id="logSubmitBtn" onclick="submitLog()">Save Log</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _activeTmdbId = null;
+
+document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+
+// Render streaming badges for preference summary
+{% for s in preferences.streaming_services[:3] %}
+document.getElementById('pref-svc-{{ loop.index }}').outerHTML = streamingBadge('{{ s }}');
+{% endfor %}
+
+async function loadRecs() {
+  const mood  = document.getElementById('moodFilter').value;
+  const genre = document.getElementById('genreFilter').value;
+
+  const statusEl = document.getElementById('recStatus');
+  const resultsEl = document.getElementById('recResults');
+  statusEl.innerHTML = '<div class="loading"><div class="spinner"></div> Scoring movies…</div>';
+  resultsEl.innerHTML = '';
+
+  let url = '/api/recommendations?limit=24';
+  if (mood)  url += `&mood=${encodeURIComponent(mood)}`;
+  if (genre) url += `&genre=${encodeURIComponent(genre)}`;
+
+  const data = await api('GET', url);
+  statusEl.innerHTML = '';
+
+  if (!data.length) {
+    resultsEl.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">✦</div>
+        <h2>No recommendations yet</h2>
+        <p>Add movies to your watchlist and set genre preferences in your profile.</p>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:8px;">
+          <a href="/search" class="btn btn-primary">Search Movies</a>
+          <a href="/profile" class="btn btn-secondary">Set Preferences</a>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const maxScore = Math.max(...data.map(m => m.score), 1);
+
+  resultsEl.innerHTML = `
+    <div style="margin-bottom:14px;color:var(--text3);font-size:.85rem;">
+      Showing ${data.length} recommendation${data.length !== 1 ? 's' : ''}
+      ${mood ? ` · mood: <strong style="color:var(--text2)">${mood}</strong>` : ''}
+      ${genre ? ` · genre: <strong style="color:var(--text2)">${genre}</strong>` : ''}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      ${data.map((m, i) => renderRecCard(m, i, maxScore)).join('')}
+    </div>`;
+}
+
+function scoreClass(score, max) {
+  const pct = score / max;
+  if (pct >= .7) return 'score-high';
+  if (pct >= .4) return 'score-mid';
+  return 'score-low';
+}
+
+function renderRecCard(m, i, maxScore) {
+  const streaming = (m.streaming_services || []).map(streamingBadge).join(' ');
+  const reasons   = (m.reasons || []).map(r =>
+    `<span class="badge badge-reason">${esc(r)}</span>`
+  ).join(' ');
+  const genres = (m.genre || '').split(',').slice(0,3).map(g =>
+    `<span class="badge badge-genre">${g.trim()}</span>`
+  ).join(' ');
+  const scClass = scoreClass(m.score, maxScore);
+
+  return `
+    <div class="card" style="display:flex;gap:16px;padding:16px;">
+      <div style="position:relative;flex-shrink:0;">
+        ${m.poster_url
+          ? `<img src="${m.poster_url}" alt="${esc(m.title)}"
+               style="width:80px;height:120px;object-fit:cover;border-radius:8px;">`
+          : `<div style="width:80px;height:120px;background:var(--bg3);border-radius:8px;
+                         display:flex;align-items:center;justify-content:center;font-size:1.8rem;">🎬</div>`}
+        <div class="score-badge ${scClass}"
+             style="position:absolute;bottom:-10px;right:-10px;">
+          ${Math.round(m.score)}
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;">
+          <div>
+            <div style="font-weight:700;font-size:1rem;">${esc(m.title)}</div>
+            <div class="text-muted">${m.year || ''}${m.director ? ' · ' + esc(m.director) : ''}${m.runtime ? ' · ' + m.runtime + ' min' : ''}</div>
+          </div>
+          <div style="flex-shrink:0;">${rtBadge(m.rotten_tomatoes_score)}</div>
+        </div>
+
+        ${m.description ? `<div class="text-sm" style="color:var(--text2);margin-bottom:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(m.description)}</div>` : ''}
+
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+          ${reasons}
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:space-between;">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            ${genres}
+            ${streaming}
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0;">
+            <button class="btn btn-ghost btn-xs" onclick="addToWatchlist(${m.tmdb_id}, this)">+ Watchlist</button>
+            <button class="btn btn-primary btn-xs" onclick="openLog(${m.tmdb_id}, '${esc(m.title)}', '${m.year || ''}')">Log</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function openLog(tmdbId, title, year) {
+  _activeTmdbId = tmdbId;
+  document.getElementById('logModalTitle').textContent = title;
+  document.getElementById('logModalYear').textContent = year || '';
+  document.querySelector('input[name="rating"][value="3"]').checked = true;
+  document.getElementById('logMood').value = '';
+  document.getElementById('logNotes').value = '';
+  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('logModal').classList.add('open');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function submitLog() {
+  const rating = parseInt(document.querySelector('input[name="rating"]:checked').value);
+  const btn = document.getElementById('logSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const res = await api('POST', '/api/log', {
+    tmdb_id: _activeTmdbId, user_rating: rating,
+    mood_tag: document.getElementById('logMood').value,
+    notes:    document.getElementById('logNotes').value,
+    watched_date: document.getElementById('logDate').value,
+  });
+  btn.disabled = false; btn.textContent = 'Save Log';
+  if (res.success) { closeModal('logModal'); showToast('Movie logged! ✓'); loadRecs(); }
+  else showToast(res.error || 'Failed', 'error');
+}
+
+async function addToWatchlist(tmdbId, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const res = await api('POST', '/api/watchlist/add', { tmdb_id: tmdbId, priority: 3 });
+  if (res.success) { btn.textContent = '✓ Listed'; showToast('Added to watchlist!'); }
+  else { btn.disabled = false; btn.textContent = '+ Watchlist'; showToast(res.error || 'Failed', 'error'); }
+}
+
+function clearFilters() {
+  document.getElementById('moodFilter').value = '';
+  document.getElementById('genreFilter').value = '';
+  loadRecs();
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('logModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('logModal');
+});
+
+// Auto-load on page open
+loadRecs();
+</script>
+{% endif %}
+{% endblock %}
