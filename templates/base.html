@@ -619,12 +619,7 @@
   <div class="sidebar-footer">CineMatch v1.0</div>
 </nav>
 
-<main class="main-content">
-  {% block content %}{% endblock %}
-</main>
-
-<div id="toast" class="toast"></div>
-
+<!-- Shared utilities — defined before the content block so template scripts can call them -->
 <script>
 let _toastTimer;
 function showToast(msg, type = 'success') {
@@ -681,6 +676,12 @@ async function api(method, url, body) {
   return r.json();
 }
 </script>
+
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+<div id="toast" class="toast"></div>
 
 {% block scripts %}{% endblock %}
 </body>

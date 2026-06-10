@@ -265,8 +265,8 @@ document.getElementById('logModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeModal('logModal');
 });
 
-// Auto-load on page open
-loadRecs();
+// Auto-load once DOM is ready (ensures shared utilities are defined)
+document.addEventListener('DOMContentLoaded', loadRecs);
 </script>
 {% endif %}
 {% endblock %}
